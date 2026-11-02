@@ -1,0 +1,366 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob: data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0E7C86">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stimmcoach">
+</head><body>
+<title>Stimmcoach Labor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: Kopf mit Stück-Leiste, Reiter; „Üben": Wiedergabeleiste oben (klebt), Mixer links, Noten rechts (mobil gestapelt) */
+:root{
+  --paper:#EDF1F2; --card:#FFFFFF; --ink:#15242C; --ink-soft:#4E626D; --trace:#0E7C86; --trace-dim:#B9D8DB;
+  --active:#C57F06; --done:#2E7D5B; --bad:#B4432F; --line:#CBD5D9; --tint:#E3ECEE;
+  --mono:"Cascadia Code","Cascadia Mono",Consolas,ui-monospace,monospace;
+  --sans:"Segoe UI Variable","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0F1A1F; --card:#16242B; --ink:#E4ECEF; --ink-soft:#9AB0BA; --trace:#3CB4BE; --trace-dim:#25474D;
+  --active:#E3A33A; --done:#5CBB8C; --bad:#E07A62; --line:#2A3B43; --tint:#1C2D34; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0F1A1F; --card:#16242B; --ink:#E4ECEF; --ink-soft:#9AB0BA; --trace:#3CB4BE; --trace-dim:#25474D;
+  --active:#E3A33A; --done:#5CBB8C; --bad:#E07A62; --line:#2A3B43; --tint:#1C2D34; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--paper)}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:24px;margin:0;font-weight:650;letter-spacing:-.01em}
+h2{font-size:15px;margin:0;font-weight:650}
+p{margin:0}
+.eyebrow{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--trace)}
+.muted{color:var(--ink-soft);font-size:13.5px}
+.err{color:var(--bad);font-weight:600}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;align-items:flex-end}
+header .meta{font:12px var(--mono);color:var(--ink-soft)}
+.bar{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+#ablage{border:1.5px dashed var(--trace-dim);border-radius:8px;padding:8px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pdf-link{font-size:14px;font-weight:600;color:var(--trace)}
+#ablage.drag{border-color:var(--trace);background:var(--tint)}
+.stueck{min-width:0;flex:1 1 260px}
+.stueck b{display:block;font-size:16px}
+body:not(.geladen) .nur-geladen{opacity:.5;pointer-events:none}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink-soft)}
+select,input[type=file]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;max-width:100%}
+button{font:600 14px var(--sans);background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 14px;cursor:pointer;min-height:40px}
+button.prim{background:var(--trace);border-color:var(--trace);color:var(--card)}
+button:hover:not(:disabled){border-color:var(--trace)}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
+input[type=range]{accent-color:var(--trace)}
+.tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line)}
+.tab{border:none;border-bottom:3px solid transparent;border-radius:0;background:none;color:var(--ink-soft);padding:10px 14px;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--trace)}
+.tab small{font:11px var(--mono);color:var(--trace);margin-left:6px}
+.panel{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:16px;align-items:start}
+.panel.eins{grid-template-columns:minmax(0,1fr)}
+@media (max-width:860px){.panel{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ziel{font-size:13px;color:var(--ink-soft);border-left:3px solid var(--trace-dim);padding-left:10px}
+.ziel b{color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.kvs{display:flex;flex-direction:column}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.kv:last-child{border-bottom:none}
+.kv span{color:var(--ink-soft)}
+.kv b{font:600 14px var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.kv b.ok{color:var(--done)} .kv b.ok::after{content:" ✓"}
+.kv b.bad{color:var(--bad)} .kv b.bad::after{content:" ✕"}
+details.mess{border-top:1px solid var(--line);padding-top:10px}
+details.mess summary{cursor:pointer;font-weight:650;font-size:14px}
+details.mess[open] summary{margin-bottom:8px}
+
+/* Wiedergabeleiste */
+.transport{grid-column:1/-1;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;box-shadow:0 4px 14px -10px rgba(0,0,0,.35)}
+.transport .tasten{display:flex;gap:6px}
+.transport .play{width:52px;font-size:18px;padding:0}
+.transport .pos{font:600 14px var(--mono);font-variant-numeric:tabular-nums;min-width:118px;white-space:nowrap}
+.transport .pos small{display:block;font:11px var(--mono);color:var(--ink-soft)}
+.transport label.f{min-width:0}
+.slider{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ink-soft);min-width:120px;flex:1 1 120px;max-width:200px}
+.slider span b{font:600 12px var(--mono);color:var(--ink)}
+.slider span{white-space:nowrap}
+.schalter{display:flex;gap:6px;align-items:center;font-size:14px;white-space:nowrap}
+.schalter input{width:18px;height:18px;accent-color:var(--trace)}
+#laden{font-size:12.5px;color:var(--active)}
+.transport .zweit{display:contents}
+.nur-mobil{display:none}
+@media (max-width:860px){
+  .transport{gap:8px 10px;padding:8px 10px}
+  .transport .pos{min-width:0;flex:1}
+  .nur-mobil{display:inline-block}
+  .transport .zweit{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;width:100%;border-top:1px solid var(--line);padding-top:8px}
+  .transport:not(.offen) .zweit{display:none}
+  .noten-karte{order:2}
+  .mixer-karte{order:3}
+  .transport .pos{font-size:13px}
+  .pos-zeit{display:none}
+  .transport button{padding:8px 10px}
+}
+
+/* Mixer */
+.mix{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.mix label{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:13.5px;cursor:pointer}
+.mix label:has(input:checked){border-color:var(--trace);background:var(--tint)}
+#regler{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.regler{display:flex;flex-direction:column;align-items:center;gap:4px;font:12px var(--mono)}
+.regler.eigen span{color:var(--trace);font-weight:700}
+.regler input{writing-mode:vertical-lr;direction:rtl;height:110px;width:28px}
+.regler small{font:11px var(--sans);color:var(--ink-soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.regler output{font:11px var(--mono);color:var(--ink-soft)}
+
+#noten{background:#fff;border-radius:8px;min-height:240px;overflow:auto;padding:4px;color:#000}
+#noten svg{max-width:100%;height:auto}
+#noten g.measure{cursor:pointer}
+#noten g.note.on, #noten g.note.on *{fill:#C57F06;stroke:#C57F06}
+#textansicht{display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow:auto}
+.zeile{display:grid;grid-template-columns:54px 1fr auto;gap:10px;padding:8px;border-radius:6px;align-items:baseline;cursor:pointer}
+.zeile.on{background:var(--tint)}
+.zeile .takt{font:12px var(--mono);color:var(--ink-soft)}
+.zeile .txt{font-size:17px;line-height:1.4}
+.zeile .schw{font-size:10px;letter-spacing:1px;color:var(--active);white-space:nowrap}
+.pager{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.pager span{font:13px var(--mono);color:var(--ink-soft)}
+
+.readout{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+#ton{font:700 44px/1 var(--mono)}
+#cent{font:600 20px var(--mono);color:var(--trace)}
+#hz{font:13px var(--mono);color:var(--ink-soft)}
+#kurve{width:100%;height:240px;background:var(--paper);border-radius:8px;display:block}
+.kein-mikro .mikro-btn{opacity:.45;pointer-events:none}
+.mikro-hinweis{display:none}
+.kein-mikro .mikro-hinweis{display:block;background:var(--tint);border-radius:8px;padding:10px 12px;font-size:13.5px}
+table.mini{border-collapse:collapse;width:100%;font:13px var(--mono)}
+table.mini td,table.mini th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left}
+table.mini .ok{color:var(--done)} table.mini .bad{color:var(--bad)}
+#protokoll-json{background:var(--paper);border-radius:8px;padding:12px;font:12px/1.5 var(--mono);max-height:60vh;overflow:auto;white-space:pre;margin:0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:14px;z-index:20}
+footer{font:12px var(--mono);color:var(--ink-soft);display:flex;flex-direction:column;gap:4px}
+/* Lernplan */
+.lern-leiste{grid-column:1/-1;background:var(--card);border:1px solid var(--trace);border-left:5px solid var(--trace);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.lern-leiste .was{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lern-leiste .was b{font-size:15px}
+.lern-leiste .knoepfe{display:flex;flex-wrap:wrap;gap:6px}
+button.sitzt{border-color:var(--done);color:var(--done)} button.wackelt{border-color:var(--active);color:var(--active)} button.daneben{border-color:var(--bad);color:var(--bad)}
+.stufen{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.stufen li{display:grid;grid-template-columns:22px 1fr 44px;gap:2px 10px;align-items:center;font-size:14px}
+.stufen li .nr{font:700 12px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--tint);color:var(--ink-soft)}
+.stufen li.jetzt .nr{background:var(--trace);color:var(--card)}
+.stufen li.fertig .nr{background:var(--done);color:var(--card)}
+.stufen li .bal{grid-column:2/3;height:6px;border-radius:3px;background:var(--tint);overflow:hidden}
+.stufen li .bal i{display:block;height:100%;background:var(--trace)}
+.stufen li.fertig .bal i{background:var(--done)}
+.stufen li small{grid-column:2/3;color:var(--ink-soft);font-size:12.5px}
+.stufen li .pz{grid-row:1/3;grid-column:3;font:12px var(--mono);color:var(--ink-soft);text-align:right}
+.plan{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.plan li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.plan li:last-child{border-bottom:none}
+.plan li small{color:var(--ink-soft)}
+.plan li .dauer{font:12px var(--mono);color:var(--ink-soft);grid-row:1/3;grid-column:2;align-self:center}
+.plan li.dran{background:var(--tint);border-radius:6px;padding-inline:8px}
+.karte{display:flex;flex-direction:column;gap:6px}
+.karte .abschn{display:grid;grid-template-columns:64px 1fr;gap:8px;align-items:start}
+.karte .abschn > span{font:600 12px var(--mono);color:var(--ink-soft);padding-top:6px}
+.karte .chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{min-height:32px;padding:4px 8px;font:600 12px var(--mono);border-radius:6px;border:1px solid var(--line);background:var(--card)}
+.chip.neu{background:var(--card);color:var(--ink-soft)}
+.chip.arbeit{background:var(--trace-dim);border-color:var(--trace-dim)}
+.chip.ruht{background:var(--card);border-color:var(--trace);color:var(--trace)}
+.chip.gelb{background:var(--active);border-color:var(--active);color:var(--card)}
+.chip.rot{background:var(--bad);border-color:var(--bad);color:var(--card)}
+.chip.fest{background:var(--done);border-color:var(--done);color:var(--card)}
+.legende{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12.5px;color:var(--ink-soft)}
+.legende i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid var(--line)}
+.zeile .anker{color:var(--trace);margin-right:4px}
+.zeile .leer{color:var(--ink-soft);letter-spacing:4px}
+.einsatz-erg{font:600 14px var(--mono)}
+.kopf-rechts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.hinweis{background:var(--tint);border-radius:8px;padding:10px 12px;font-size:14px;margin:0}
+.hinweis.update{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid var(--trace)}
+.bib{display:flex;gap:6px;align-items:flex-end;min-width:0;max-width:100%}
+.bib label.f{min-width:0;flex:1 1 auto}
+#bibliothek{width:100%;min-width:0}
+@media (max-width:860px){.lp-heute{order:-1}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div><span class="eyebrow">Vocatief Stimmcoach · Phase 0</span><h1>Spike-Labor</h1></div>
+    <div class="kopf-rechts"><button id="installieren" hidden>App installieren</button><span class="meta" id="geraet"></span></div>
+  </header>
+  <p class="hinweis" id="ios-hinweis" hidden>Als App aufs iPhone: unten auf <b>Teilen</b> tippen, dann <b>Zum Home-Bildschirm</b>.</p>
+  <div class="hinweis update" id="update" hidden><span>Eine neue Version ist da.</span><button class="prim" id="update-los">Neu laden</button></div>
+
+  <div class="bar">
+    <div id="ablage">
+      <label class="f" for="datei">Stück-Paket (.vsc) öffnen<input type="file" id="datei" accept=".vsc,application/zip"></label>
+    </div>
+    <div class="bib" id="bib" hidden>
+      <label class="f" for="bibliothek">Meine Stücke<select id="bibliothek"></select></label>
+      <button id="bib-weg" title="Aus der App entfernen" disabled>Entfernen</button>
+    </div>
+    <div class="stueck"><b id="stueck-titel">Kein Stück geladen</b><span class="muted" id="stueck-meta">Pakete erzeugt die Werkstatt am Laptop. Hierher ziehen oder auswählen.</span><p class="err" id="stueck-fehler" hidden></p></div>
+    <a id="original-pdf" class="pdf-link" target="_blank" rel="noopener" hidden>Original-PDF öffnen</a>
+    <label class="f nur-geladen" for="stimme">Meine Stimme<select id="stimme"></select></label>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" data-tab="ueben" role="tab">Üben &amp; Notensatz<small>P0.4 · P0.8</small></button>
+    <button class="tab" data-tab="lernplan" role="tab">Lernplan<small>P4</small></button>
+    <button class="tab" data-tab="latenz" role="tab">Latenz<small>P0.6</small></button>
+    <button class="tab" data-tab="tonhoehe" role="tab">Tonhöhe<small>P0.5</small></button>
+    <button class="tab" data-tab="protokoll" role="tab">Protokoll<small id="protokoll-zahl"></small></button>
+  </nav>
+
+  <section class="panel" id="panel-ueben">
+    <div class="lern-leiste" id="lern-leiste" hidden>
+      <div class="was"><span class="eyebrow" id="ll-stufe"></span><b id="ll-titel"></b><span class="muted" id="ll-hinweis"></span></div>
+      <div class="knoepfe" id="ll-knoepfe"></div>
+    </div>
+    <div class="transport nur-geladen" role="group" aria-label="Wiedergabe">
+      <div class="tasten">
+        <button class="prim play" id="abspielen" title="Abspielen (Leertaste)" aria-label="Abspielen">▶</button>
+        <button class="play" id="pause" title="Pause (Leertaste)" aria-label="Pause" hidden>❚❚</button>
+        <button id="stopp" title="Zurück zum Anfang des Abschnitts" aria-label="Stopp">■</button>
+      </div>
+      <div class="pos"><span id="position"><span id="pos-takt">T. 1</span><span class="pos-zeit"> · <span id="pos-zeit">0:00</span></span></span><small id="laden"></small></div>
+      <button id="einsatzton" title="Meinen nächsten Ton anspielen">Einsatzton</button>
+      <button id="mehr" class="nur-mobil" aria-expanded="false" aria-controls="zweit">Mehr</button>
+      <div class="zweit" id="zweit">
+      <label class="f" for="ansicht">Ansicht<select id="ansicht"><option value="gesamt">Gesamtpartitur</option><option value="eigene">Nur meine Stimme</option><option value="text">Nur Text</option><option value="stichworte">Nur Stichworte</option><option value="leer">Auswendig (ohne Text)</option></select></label>
+      <label class="f" for="abschnitt">Abschnitt<select id="abschnitt"><option value="">ganzes Stück</option></select></label>
+      <label class="f" for="bereich">Bereich<select id="bereich"><option value="nur">nur dieser</option><option value="ab">ab hier bis Schluss</option></select></label>
+      <label class="schalter" for="auftakt" id="auftakt-label" title="Kein Auftakt zu diesem Abschnitt erkannt"><input type="checkbox" id="auftakt" disabled> <span id="auftakt-text">mit Auftakt</span></label>
+      <label class="schalter" for="schleife"><input type="checkbox" id="schleife"> Schleife</label>
+      <label class="slider" for="tempo"><span>Tempo <b id="tempo-wert">100 %</b></span><input type="range" id="tempo" min="50" max="120" step="5" value="100"></label>
+      <label class="slider" for="gesamt"><span>Gesamtlautstärke <b id="gesamt-wert">80 %</b></span><input type="range" id="gesamt" min="0" max="120" step="5" value="80"></label>
+      <label class="schalter" for="dynamik"><input type="checkbox" id="dynamik" checked> Dynamik aus den Noten</label>
+      <label class="schalter" for="swing"><input type="checkbox" id="swing" disabled> Swing</label>
+      </div>
+    </div>
+
+    <div class="card mixer-karte">
+      <h2>Mixer</h2>
+      <div class="mix">
+        <label><input type="radio" name="mix" value="alle" checked> Alle Stimmen</label>
+        <label><input type="radio" name="mix" value="verstaerkt"> Meine verstärkt</label>
+        <label><input type="radio" name="mix" value="nurEigene"> Nur meine</label>
+        <label><input type="radio" name="mix" value="ohneEigene"> Ohne meine</label>
+      </div>
+      <div id="regler" class="nur-geladen"><p class="muted" style="grid-column:1/-1">Nach dem Laden eines Stücks erscheinen hier sechs Regler.</p></div>
+      <p class="muted">Alles wirkt sofort, auch während der Wiedergabe. Eigene Stimme in der Mitte, die anderen im Stereobild verteilt. Auf einen Takt tippen springt dorthin.</p>
+      <p class="muted" id="dynamik-info"></p>
+      <p class="muted" id="spruenge"></p>
+
+      <details class="mess">
+        <summary>Ansicht &amp; Messung</summary>
+        <div class="row">
+          <label class="f" for="engine">Bibliothek<select id="engine"><option value="verovio">Verovio</option><option value="osmd">OpenSheetMusicDisplay</option></select></label>
+          <label class="f" for="zoom">Größe<input type="range" id="zoom" min="25" max="70" value="40"></label>
+        </div>
+        <div class="row" style="margin-top:8px"><button class="nur-geladen" id="rendern">Neu zeichnen und messen</button><button class="nur-geladen" id="belastung">Belastungstest 30 s</button></div>
+        <p class="ziel" style="margin-top:8px">Gate P0: <b>Seitenwechsel ≤ 1 s</b>, <b>Gleichlauf ≤ 50 ms</b>, <b>keine Note zu spät</b>.</p>
+        <div class="kvs" id="erg-notensatz"></div>
+        <div class="kvs" id="erg-klang"></div>
+      </details>
+    </div>
+
+    <div class="card noten-karte">
+      <div class="pager" id="seiten" hidden><button id="seite-zurueck">‹ Zurück</button><span id="seite"></span><button id="seite-vor">Weiter ›</button></div>
+      <div id="noten"><p class="muted" style="padding:12px">Hier erscheinen die Noten, sobald ein Stück geöffnet ist.</p></div>
+      <div id="textansicht" hidden></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-lernplan" hidden>
+    <div class="card">
+      <h2>Lernstand</h2>
+      <p class="muted" id="lp-stimme">Erst ein Stück öffnen und die eigene Stimme wählen.</p>
+      <ol class="stufen" id="lp-stufen"></ol>
+      <div class="row nur-geladen">
+        <label class="f" for="lp-probe">Nächste Probe<input type="date" id="lp-probe"></label>
+        <label class="f" for="lp-minuten">Übezeit am Tag<select id="lp-minuten"><option value="15">15 min</option><option value="20" selected>20 min</option><option value="30">30 min</option></select></label>
+      </div>
+      <p class="muted" id="lp-probenplan"></p>
+      <details class="mess">
+        <summary>Lernstand sichern</summary>
+        <p class="muted">Der Lernstand bleibt in diesem Browser auf diesem Gerät. Zum Mitnehmen auf ein anderes Gerät als Datei speichern.</p>
+        <div class="row" style="margin-top:8px"><button id="lp-export" class="nur-geladen">Als Datei speichern</button><label class="f" for="lp-import">Aus Datei laden<input type="file" id="lp-import" accept=".json,application/json"></label><button id="lp-reset" class="nur-geladen">Neu beginnen</button></div>
+      </details>
+    </div>
+    <div class="card lp-heute">
+      <div class="row" style="justify-content:space-between;align-items:center"><h2>Heute</h2><button class="prim nur-geladen" id="lp-start">Heute üben</button></div>
+      <p class="muted" id="lp-heute-info"></p>
+      <ol class="plan" id="lp-plan"></ol>
+      <h2>Stellen &amp; Schwachstellen</h2>
+      <div class="karte" id="lp-karte"><p class="muted">Jede Kachel ist eine Übe-Stelle deiner Stimme, ⚓ markiert Anker-Einsätze. Antippen übt genau diese Stelle.</p></div>
+      <div class="legende"><span><i style="background:var(--card)"></i>neu</span><span><i style="background:var(--trace-dim)"></i>in Arbeit</span><span><i style="border-color:var(--trace)"></i>ruht (Abstand)</span><span><i style="background:var(--active)"></i>wackelt</span><span><i style="background:var(--bad)"></i>daneben</span><span><i style="background:var(--done)"></i>gefestigt</span></div>
+      <details class="mess" id="lp-einsatz">
+        <summary>Einsatzton-Trainer</summary>
+        <p class="muted">Bezug hören, deinen Anfangston summen, dann zur Kontrolle auflösen.</p>
+        <div class="row" style="margin-top:8px">
+          <label class="f" for="et-stelle">Einsatz<select id="et-stelle"></select></label>
+          <button id="et-bezug" class="nur-geladen">Bezug hören</button>
+          <button id="et-loesung" class="nur-geladen">Auflösen</button>
+        </div>
+        <p class="muted" id="et-info"></p>
+        <div class="row"><button class="sitzt nur-geladen" id="et-ok">Getroffen</button><button class="daneben nur-geladen" id="et-nein">Daneben</button><span class="einsatz-erg" id="et-stat"></span></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel braucht-mikro" id="panel-latenz" hidden>
+    <div class="card">
+      <p class="ziel">Gate P0: Latenz bekannt und stabil, <b>Streuung ≤ 10 ms</b>. Ohne diesen Wert lässt sich eine Aufnahme nicht genau an die Noten legen.</p>
+      <p class="mikro-hinweis">In dieser Ansicht gibt es kein Mikrofon. Starte das Labor lokal am Laptop (Anleitung in LIES-MICH.md) oder am Handy über eine HTTPS-Adresse.</p>
+      <p class="muted">So geht's: Lautstärke hoch, Gerät ruhig hinlegen. Das Labor spielt 20 Klicks und sucht sie im Mikrofon. Mit Kopfhörer: Hörmuschel direkt ans Mikrofon halten.</p>
+      <label class="f" for="latenz-weg">Ausgabe<select id="latenz-weg"><option>Lautsprecher</option><option>Kopfhörer mit Kabel</option><option>Bluetooth-Kopfhörer</option></select></label>
+      <button class="prim mikro-btn" id="latenz-start">Latenz messen</button>
+      <button id="latenz-wav" disabled>Letzte Latenz-Aufnahme als WAV</button>
+      <span class="muted" id="mikro-info">Mikrofon aus</span>
+    </div>
+    <div class="card"><h2>Ergebnis</h2><div class="kvs" id="erg-latenz"><p class="muted">Noch nicht gemessen.</p></div></div>
+  </section>
+
+  <section class="panel braucht-mikro" id="panel-tonhoehe" hidden>
+    <div class="card">
+      <p class="ziel">Gate P0: <b>Median-Abweichung ≤ 15 Cent</b> gegenüber einer Referenzmessung, für alle sechs Stimmlagen.</p>
+      <p class="mikro-hinweis">In dieser Ansicht gibt es kein Mikrofon. Starte das Labor lokal am Laptop oder am Handy über HTTPS.</p>
+      <div class="row"><button class="prim mikro-btn" id="live-start">Live anzeigen</button><button id="live-stopp" hidden>Mikrofon aus</button></div>
+      <div class="row"><label class="f" for="zielton">Zielton<select id="zielton"></select></label><button class="mikro-btn" id="halten">Ton halten (3 s)</button></div>
+      <div class="row"><button class="mikro-btn" id="selbsttest">Selbsttest über Lautsprecher</button><button id="wav" disabled>Letzte Aufnahme als WAV</button></div>
+      <div id="erg-tonhoehe" class="kvs"><p class="muted">Die WAV-Datei dient als Referenz: Die Werkstatt misst sie mit SwiftF0 nach.</p></div>
+    </div>
+    <div class="card">
+      <div class="readout"><span id="ton">–</span><span id="cent"></span><span id="hz"></span></div>
+      <canvas id="kurve"></canvas>
+      <p class="muted">Raster: C und G jeder Oktave, Bereich = Umfang der gewählten Stimme.</p>
+    </div>
+  </section>
+
+  <section class="panel eins" id="panel-protokoll" hidden>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2>Messprotokoll</h2><div class="row"><button id="kopieren">Kopieren</button><button class="prim" id="speichern">Als JSON speichern</button></div></div>
+      <p class="muted">Bitte nach den Messungen speichern und im Ordner <b>Lern App\messungen</b> ablegen. Gerät und Browser werden mitprotokolliert, Aufnahmen nicht.</p>
+      <pre id="protokoll-json"></pre>
+    </div>
+  </section>
+
+  <footer>
+    <span>Stimmcoach Spike-Labor 0.2 · alles läuft lokal im Gerät · keine Daten verlassen den Browser</span>
+    <span>Klavierklang: FluidR3_GM „Acoustic Grand Piano" von Frank Wen, CC BY 3.0, aufbereitet von midi-js-soundfonts (Benjamin Gleitzman). Notensatz: Verovio (LGPL-3.0), OpenSheetMusicDisplay (BSD-3-Clause).</span>
+  </footer>
+</div>
+<div id="toast" role="status" hidden></div>
+<script src="labor.js"></script>
+
+</body></html>
