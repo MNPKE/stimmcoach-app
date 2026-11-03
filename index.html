@@ -182,6 +182,7 @@ button.sitzt{border-color:var(--done);color:var(--done)} button.wackelt{border-c
 .zeile .anker{color:var(--trace);margin-right:4px}
 .zeile .leer{color:var(--ink-soft);letter-spacing:4px}
 .einsatz-erg{font:600 14px var(--mono)}
+#ab-knopf.aktiv{border-color:var(--active);color:var(--active)}
 .kopf-rechts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .hinweis{background:var(--tint);border-radius:8px;padding:10px 12px;font-size:14px;margin:0}
 .hinweis.update{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid var(--trace)}
@@ -189,6 +190,23 @@ button.sitzt{border-color:var(--done);color:var(--done)} button.wackelt{border-c
 .bib label.f{min-width:0;flex:1 1 auto}
 #bibliothek{width:100%;min-width:0}
 @media (max-width:860px){.lp-heute{order:-1}}
+/* Aufnahme & Auswertung */
+.links{display:flex;flex-direction:column;gap:16px;min-width:0}
+.auswertung{grid-column:1/-1;border-color:var(--trace)}
+.aw-saetze{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:14.5px}
+#aw-kurve{width:100%;height:200px;background:var(--paper);border-radius:8px;display:block}
+.aw-noten{display:flex;flex-wrap:wrap;gap:4px}
+.nchip{display:inline-flex;flex-direction:column;align-items:center;min-width:42px;padding:3px 6px;border-radius:6px;font:600 12.5px var(--sans);border:1px solid var(--line)}
+.nchip small{font:11px var(--mono);font-weight:400}
+.nchip.gut{background:var(--done);border-color:var(--done);color:var(--card)}
+.nchip.knapp{background:var(--trace-dim);border-color:var(--trace-dim)}
+.nchip.daneben{background:var(--bad);border-color:var(--bad);color:var(--card)}
+.nchip.oktave{background:var(--active);border-color:var(--active);color:var(--card)}
+.nchip.fehlt{background:var(--card);color:var(--ink-soft);border-style:dashed}
+.nchip.einsatz-fehl{box-shadow:inset 0 -3px 0 var(--ink)}
+button.vorschlag{outline:3px solid currentColor;outline-offset:1px}
+#aufn-start.laeuft{background:var(--bad);border-color:var(--bad)}
+@media (max-width:860px){.links{order:3}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -236,11 +254,14 @@ button.sitzt{border-color:var(--done);color:var(--done)} button.wackelt{border-c
       <button id="einsatzton" title="Meinen nächsten Ton anspielen">Einsatzton</button>
       <button id="mehr" class="nur-mobil" aria-expanded="false" aria-controls="zweit">Mehr</button>
       <div class="zweit" id="zweit">
-      <label class="f" for="ansicht">Ansicht<select id="ansicht"><option value="gesamt">Gesamtpartitur</option><option value="eigene">Nur meine Stimme</option><option value="text">Nur Text</option><option value="stichworte">Nur Stichworte</option><option value="leer">Auswendig (ohne Text)</option></select></label>
+      <button id="akkord" title="Den Akkord beim nächsten Einsatz anspielen">Akkord</button>
+      <label class="f" for="ansicht">Ansicht<select id="ansicht"><option value="gesamt">Gesamtpartitur</option><option value="eigene">Nur meine Stimme</option><option value="noten-gesamt">Nur Noten – alle Stimmen</option><option value="noten-eigene">Nur Noten – meine Stimme</option><option value="text">Nur Text</option><option value="stichworte">Nur Stichworte</option><option value="leer">Auswendig (ohne Text)</option></select></label>
       <label class="f" for="abschnitt">Abschnitt<select id="abschnitt"><option value="">ganzes Stück</option></select></label>
       <label class="f" for="bereich">Bereich<select id="bereich"><option value="nur">nur dieser</option><option value="ab">ab hier bis Schluss</option></select></label>
       <label class="schalter" for="auftakt" id="auftakt-label" title="Kein Auftakt zu diesem Abschnitt erkannt"><input type="checkbox" id="auftakt" disabled> <span id="auftakt-text">mit Auftakt</span></label>
       <label class="schalter" for="schleife"><input type="checkbox" id="schleife"> Schleife</label>
+      <button id="ab-knopf" title="Schleife von Takt A bis Takt B: Knopf drücken, dann ersten und letzten Takt antippen">A–B</button>
+      <label class="schalter" for="vorzaehler"><input type="checkbox" id="vorzaehler"> Vorzähler</label>
       <label class="slider" for="tempo"><span>Tempo <b id="tempo-wert">100 %</b></span><input type="range" id="tempo" min="50" max="120" step="5" value="100"></label>
       <label class="slider" for="gesamt"><span>Gesamtlautstärke <b id="gesamt-wert">80 %</b></span><input type="range" id="gesamt" min="0" max="120" step="5" value="80"></label>
       <label class="schalter" for="dynamik"><input type="checkbox" id="dynamik" checked> Dynamik aus den Noten</label>
@@ -248,6 +269,15 @@ button.sitzt{border-color:var(--done);color:var(--done)} button.wackelt{border-c
       </div>
     </div>
 
+    <div class="card auswertung" id="auswertung" hidden>
+      <div class="row" style="justify-content:space-between;align-items:center"><div><span class="eyebrow">Auswertung</span><h2 id="aw-titel"></h2></div><div class="row"><span id="aw-vorschlag"></span><button id="aw-zu" aria-label="Auswertung schließen">Schließen</button></div></div>
+      <ol class="aw-saetze" id="aw-saetze"></ol>
+      <canvas id="aw-kurve" height="200"></canvas>
+      <div class="aw-noten" id="aw-noten"></div>
+      <p class="muted" id="aw-info"></p>
+    </div>
+
+    <div class="links">
     <div class="card mixer-karte">
       <h2>Mixer</h2>
       <div class="mix">
@@ -272,6 +302,20 @@ button.sitzt{border-color:var(--done);color:var(--done)} button.wackelt{border-c
         <div class="kvs" id="erg-notensatz"></div>
         <div class="kvs" id="erg-klang"></div>
       </details>
+    </div>
+
+    <div class="card aufn-karte">
+      <h2>Aufnahme &amp; Auswertung</h2>
+      <p class="muted">Singt den gewählten Abschnitt bzw. die Lernplan-Stelle einmal durch. Danach gibt es eine Bewertung je Note. Die Aufnahme bleibt am Gerät.</p>
+      <div class="row">
+        <label class="f" for="aufn-begl">Begleitung<select id="aufn-begl"><option value="mit">mit Begleitung (Kopfhörer!)</option><option value="ohne">a cappella – nur Einsatzton</option></select></label>
+        <label class="f" for="aufn-weg">Ausgabe<select id="aufn-weg"><option>Kopfhörer mit Kabel</option><option>Bluetooth-Kopfhörer</option><option>Lautsprecher</option></select></label>
+        <label class="schalter" for="aufn-vorz"><input type="checkbox" id="aufn-vorz" checked> Vorzähler</label>
+      </div>
+      <p class="muted" id="aufn-latenz"></p>
+      <div class="row"><button class="prim nur-geladen" id="aufn-start">● Aufnehmen &amp; auswerten</button><button id="aufn-wav" disabled>Aufnahme als WAV</button></div>
+      <p class="muted" id="aufn-status" role="status"></p>
+    </div>
     </div>
 
     <div class="card noten-karte">

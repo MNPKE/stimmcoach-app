@@ -9,6 +9,34 @@
  "orientation": "any",
  "background_color": "#EDF1F2",
  "theme_color": "#0E7C86",
+ "share_target": {
+  "action": "./teilen",
+  "method": "POST",
+  "enctype": "multipart/form-data",
+  "params": {
+   "files": [
+    {
+     "name": "paket",
+     "accept": [
+      "application/zip",
+      "application/octet-stream",
+      "application/x-zip-compressed",
+      ".vsc"
+     ]
+    }
+   ]
+  }
+ },
+ "file_handlers": [
+  {
+   "action": "./",
+   "accept": {
+    "application/x-vocatief-stueck": [
+     ".vsc"
+    ]
+   }
+  }
+ ],
  "icons": [
   {
    "src": "icons/icon-192.png",
